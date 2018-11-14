@@ -15,4 +15,4 @@ don't use production environment, because it is Suitable for learning React!!!
 
 #### chinese
 
-https://github.com/labike/miniReact/edit/master/README.md
+https://github.com/labike/miniReact/blob/master/include-explain-core.js
