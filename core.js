@@ -174,7 +174,7 @@
       }
   };
   if (typeof module == 'undefined'){
-      window.Gooact  = {
+      window.miniReact  = {
           createElement, 
           render, 
           Component
