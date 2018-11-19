@@ -1,5 +1,5 @@
 /**
- * 用DOM Tree描述DOM节点和元素
+ * 描述DOM节点和元素
  */
 {
     "type": "ul",
@@ -42,22 +42,24 @@ const list = createElement(
     {
         className: "ul-list"
     },
-    createElement(
-        "li",
-        {
-            className: "single-li",
-            key: "First"
-        },
-        "First"
-    ),
-    createElement(
-        "li",
-        {
-            className: "single-li",
-            key: "second"
-        },
-        "Second"
-    )
+        createElement(
+            "li",
+            {
+                className: "single-li",
+            },
+            "children": [
+                "First"
+            ]
+        ),
+        createElement(
+            "li",
+            {
+                className: "single-li",
+            },
+            "children": [
+                "Second"
+            ] 
+        )
 )
 
 /**
@@ -69,7 +71,7 @@ const createElement = (type, props, ...children) => {
 }
 
 /**
- * rendering, 将vdom转化为真实的dom
+ * rendering渲染真实的dom
  */
 const render = (vdom, parent=null) => {
     /**
@@ -95,6 +97,7 @@ const render = (vdom, parent=null) => {
          *   ]
          * }
          * 参照上面VDOM解构理解下面如何渲染出真实的DOM
+         * 根据vdom的类型创建dom并且渲染出子节点同时设置属性值
          */
         const dom = mount(document.createElement(vdom.type))
 
@@ -121,6 +124,11 @@ const render = (vdom, parent=null) => {
  * @ 其他属性
  */
 const setAttribute = (dom, key, value) => {
+    /**
+     * @msg: 处理事件类型
+     * @param {type} event
+     * @return: onClick, onchange etc.
+     */
     if(typeof value === 'function' && key.startsWith('on')){
         const eventType = key.slice(2).toLowerCase()
 
@@ -139,7 +147,8 @@ const setAttribute = (dom, key, value) => {
 
 /**
  * patching方法是非常非常重要的 
- * 因为React正是用它将VDOM和DOM之间存在差异的DOM元素更新到真实的DOM树上的
+ * 因为React正是用它将VDOM和DOM之间存在差异的DOM元素和节点更新到真实的DOM树上的
+ * 最后由render渲染到页面上
  */
 const patch = (dom, vdom, parent=dom.parentNode) => {
     /**
@@ -151,13 +160,13 @@ const patch = (dom, vdom, parent=dom.parentNode) => {
         return Component.patch(dom, vdom, parent)
     }else if(typeof vdom !== 'object' && dom instanceof Text){
         /**
-         * 如果VDOM不是object, DOM是文本, 我们在渲染的时候要判断他的内容是否发生变化;
+         * 如果VDOM不是object(它可能是textNode或空节点), 而DOM是文本, 我们在渲染的时候要判断内容;
          * 如果发生变化就重新渲染, 否则的话就直接返回原内容
          */
         return dom.textContent !== vdom ? replace(render(vdom, parent)) : dom
     }else if(typeof vdom === 'object' && dom instanceof Text){
         /**
-         * 如果VDOM是object, DOM是文本, 直接重新渲染节点及其内容
+         * 如果VDOM是object, DOM是文本, 说明vdom和dom的类型不同, 所以直接用新的dom替换掉旧dom
          */
         return repalce(render(vdom, parent))
     }else if(typeof vdom === 'object' && dom.nodeName !== vdom.type.toUpperCase()){
@@ -167,13 +176,16 @@ const patch = (dom, vdom, parent=dom.parentNode) => {
         return replace(render(vdom, parent))
     }else if(typeof vdom === 'object' && dom.nodeName === vdom.type.toUpperCase()){
         /**
-         * 下面是如果VDOM和DOM节点名一样则执行的reconciliation
+         * 如果VDOM和DOM节点名一样则看是否有子节点或元素, 然后对子节点或元素进行patch
+         * 并且我们可以根据节点或元素的key来判断是否要更新
+         * 这其实也就是React中key的作用.
          */
         const pool = {}
         const active = document.activeElement()
 
         [].concat(...dom.childNodes).map((child, index) => {
             const key = child.__handlerKey || `__index_${index}`
+            pool[key] = child
         })
 
         [].concat(...vdom.children).map((child, index) => {
@@ -184,7 +196,9 @@ const patch = (dom, vdom, parent=dom.parentNode) => {
 
         for(const key in pool){
             const instance = pool[key].__handlerInstance
-            if(instance) instance.componentWillUnmount()
+            if(instance){
+                instance.componentWillUnmount()
+            }
             pool[key].remove()
         }
 
@@ -196,7 +210,7 @@ const patch = (dom, vdom, parent=dom.parentNode) => {
 }
 
 /**
- * component组件
+ * 创建component的方法和属性
  */
 class Component{
     constructor(props){
@@ -209,8 +223,7 @@ class Component{
 
         /**
          * 我们render的时候要判断组件类型是否是vdom.type中的某一种
-         * 如果是就创建实例并传入props
-         * 接着渲染组件
+         * 如果是就创建实例并传入props然后渲染组件
          */
         if(Component.isPrototypeOf(vdom.type)){
             const instance = new (vdom.type)(props)
@@ -221,17 +234,14 @@ class Component{
             instance.componentDidMount()
             return instance.common
         }else{
-            /**
-             * 如果不是vdom.type中的某一种类型
-             * 我们根据它的类型来渲染组件
-             * 其实在这里可以什么也不做的, 想想看我们我们已经列出了常见
-             * 组件类型, 如果他不属于上述某一种我们可以创建空组件或者什么也不做
-             * 在React中如果不是以上类型什么也不会做
-             */
             return render(vdom.type(props), parent)
         }
     }
 
+    /**
+     * render组件之前的patch过程
+     * patch主要通过遍历差异队列完成节点和元素的移除, 创建, 插入
+     */
     static patch(dom, vdom, parent=dom.parentNode){
         const props = Object.assign({}, vdom.props, {children: vdom.children})
 
@@ -247,18 +257,25 @@ class Component{
         }
     }
 
+    /**
+     * setState负责状态的更新
+     * 根据新的props或state执行componentWillUpdate和componentDidUpdate重新渲染组件
+     */
     setState(nextState){
-        if(this.base && this.shouldComponentUpdate(this.props, nextState)){
+        if(this.common && this.shouldComponentUpdate(this.props, nextState)){
             const prevState = this.state
             this.componentWillUpdate(this.props, nextState)
-            this.state = nextState
-            patch(this.base, this.render())
+            this.common = nextState
+            patch(this.common, this.render())
             this.componentDidUpdate(this.props, prevState);
         }else{
             this.state = nextState
         }
     }
 
+    /**
+     * 其他生命周期钩子
+     */
     shouldComponentUpdate(nextProps, nextState) {
          return nextProps !== this.props || nextState !== this.state
     }
@@ -267,7 +284,7 @@ class Component{
         return undefined
     }
 
-    componentWillUpdate(nextProps, nextProps){
+    componentWillUpdate(nextProps, nextState){
         return undefined
     }
 
